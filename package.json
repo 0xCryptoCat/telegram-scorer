@@ -1,0 +1,23 @@
+{
+  "name": "alphalert-telegram-scorer",
+  "version": "1.0.0",
+  "description": "Standalone wallet scorer for Telegram bot integration",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node index.js FCMXEqaSGdEHbufTCMBdG9kDd5MvU9tQmWqPn9yXF9qb sol"
+  },
+  "keywords": [
+    "crypto",
+    "wallet-scoring",
+    "telegram-bot",
+    "defi",
+    "smart-money"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
