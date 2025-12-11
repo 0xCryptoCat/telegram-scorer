@@ -383,19 +383,32 @@ function formatAmount(num) {
 
 /**
  * Format multiplier with K, M suffixes for large values
+ * Losses shown as negative: -0.68x means lost 68%
+ * Gains shown as positive: 2.50x means 2.5x return
  */
 function formatMultiplier(mult) {
-  if (mult <= 0) return '';
+  if (mult < 0) mult = 0;
+  
+  // Losses: convert to negative (0.32x becomes -0.68x)
+  if (mult < 1) {
+    const loss = mult - 1; // e.g., 0.32 - 1 = -0.68
+    return `${loss.toFixed(2)}x`;
+  }
+  
+  // Gains
   if (mult >= 1_000_000) {
     return `${(mult / 1_000_000).toFixed(1)}Mx`;
   }
   if (mult >= 1_000) {
     return `${(mult / 1_000).toFixed(1)}Kx`;
   }
-  if (mult >= 10) {
+  if (mult >= 100) {
     return `${mult.toFixed(0)}x`;
   }
-  return `${mult.toFixed(1)}x`;
+  if (mult >= 10) {
+    return `${mult.toFixed(1)}x`;
+  }
+  return `${mult.toFixed(2)}x`;
 }
 
 /**
@@ -494,10 +507,8 @@ function formatTelegramMessage(results) {
         valueStr = formatAmount(t.pnl);
       }
       
-      // Add multiplier if meaningful (not 0 or ~1.0)
-      const multStr = (t.multiplier > 0 && Math.abs(t.multiplier - 1) > 0.05) 
-        ? ` 💰 ${formatMultiplier(t.multiplier)}` 
-        : (t.holding ? ' 📦' : '');
+      // Always show multiplier
+      const multStr = ` 💰 ${formatMultiplier(t.multiplier)}`;
       
       const extras = [];
       if (t.isRugged) extras.push('💀');
@@ -519,9 +530,13 @@ function formatTelegramMessage(results) {
  * Formats: 
  *   /score <wallet> <chain>
  *   /score <wallet>
+ *   /score@botname <wallet> <chain>  (group format)
  */
 function parseCommand(text) {
-  const match = text.match(/^\/score\s+([A-Za-z0-9]{32,44})\s*(\w+)?/i);
+  // Strip @botname suffix that Telegram adds in groups
+  const cleanText = text.replace(/^\/score(@\w+)?/, '/score');
+  
+  const match = cleanText.match(/^\/score\s+([A-Za-z0-9]{32,44})\s*(\w+)?/i);
   if (!match) return null;
   
   const wallet = match[1];
