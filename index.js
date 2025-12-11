@@ -266,11 +266,19 @@ async function scoreWallet(walletAddress, chainId, maxTokens = 30) {
     // Parse token data
     const buyCount = token.totalTxBuy || 0;
     const buyAvgPrice = parseFloat(token.buyAvgPrice) || 0;
+    const buyVolume = parseFloat(token.buyVolume) || 0;
+    const sellVolume = parseFloat(token.sellVolume) || 0;
     const balance = parseFloat(token.balance) || 0;
     const balanceUsd = parseFloat(token.balanceUsd) || 0;
     const realizedPnl = parseFloat(token.realizedPnl) || 0;
     const unrealizedPnl = parseFloat(token.unrealizedPnl) || 0;
     const totalPnl = parseFloat(token.totalPnl) || 0;
+    
+    // Calculate multiplier: total value returned vs total invested
+    // Total returned = what you sold + what you still hold
+    // multiplier = (sellVolume + balanceUsd) / buyVolume
+    const totalReturned = sellVolume + balanceUsd;
+    const multiplier = buyVolume > 0 ? totalReturned / buyVolume : 0;
     
     // Check for rug
     let isRugged = false;
@@ -321,6 +329,7 @@ async function scoreWallet(walletAddress, chainId, maxTokens = 30) {
       score,
       pnl: totalPnl,
       balanceUsd,
+      multiplier,
       isRugged,
       holding: balance > 0,
     });
@@ -370,6 +379,23 @@ function formatAmount(num) {
     return `${sign}$${absNum.toFixed(0)}`;
   }
   return `${sign}$${absNum.toFixed(2)}`;
+}
+
+/**
+ * Format multiplier with K, M suffixes for large values
+ */
+function formatMultiplier(mult) {
+  if (mult <= 0) return '';
+  if (mult >= 1_000_000) {
+    return `${(mult / 1_000_000).toFixed(1)}Mx`;
+  }
+  if (mult >= 1_000) {
+    return `${(mult / 1_000).toFixed(1)}Kx`;
+  }
+  if (mult >= 10) {
+    return `${mult.toFixed(0)}x`;
+  }
+  return `${mult.toFixed(1)}x`;
 }
 
 /**
@@ -460,19 +486,24 @@ function formatTelegramMessage(results) {
       const tokenUrl = `${explorer.token}${t.address}`;
       const trades = `(${t.buyCount}↗ | ${t.sellCount}↘)`;
       
-      // Show bag value for held tokens, PnL for sold
+      // Show bag value for held tokens, PnL for sold, always show multiplier
       let valueStr;
       if (t.holding && t.balanceUsd > 0) {
-        valueStr = `${formatAmount(t.balanceUsd).replace(/^\+/, '')} 💰`;
+        valueStr = formatAmount(t.balanceUsd).replace(/^\+/, '');
       } else {
         valueStr = formatAmount(t.pnl);
       }
+      
+      // Add multiplier if meaningful (not 0 or ~1.0)
+      const multStr = (t.multiplier > 0 && Math.abs(t.multiplier - 1) > 0.05) 
+        ? ` 💰 ${formatMultiplier(t.multiplier)}` 
+        : (t.holding ? ' 📦' : '');
       
       const extras = [];
       if (t.isRugged) extras.push('💀');
       const extraStr = extras.length > 0 ? ` ${extras.join('')}` : '';
       
-      lines.push(`${icon} <a href="${tokenUrl}">${t.symbol}</a>: ${valueStr} ${trades}${extraStr}`);
+      lines.push(`${icon} <a href="${tokenUrl}">${t.symbol}</a>: ${valueStr}${multStr} ${trades}${extraStr}`);
     });
   }
   
