@@ -549,8 +549,10 @@ async function main() {
   }
 }
 
-// Run if called directly
-main();
+// Run if called directly (not when required as module)
+if (require.main === module) {
+  main();
+}
 
 // Export for serverless use
 module.exports = {
