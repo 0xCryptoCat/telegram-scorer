@@ -226,6 +226,7 @@ async function scoreWallet(walletAddress, chainId, maxTokens = 30) {
       distribution: { excellent: 0, good: 0, neutral: 0, poor: 0, terrible: 0 },
       realizedPnl: 0,
       unrealizedPnl: 0,
+      totalBagsValue: 0,
       rugged: 0,
       held: 0,
     },
@@ -266,6 +267,7 @@ async function scoreWallet(walletAddress, chainId, maxTokens = 30) {
     const buyCount = token.totalTxBuy || 0;
     const buyAvgPrice = parseFloat(token.buyAvgPrice) || 0;
     const balance = parseFloat(token.balance) || 0;
+    const balanceUsd = parseFloat(token.balanceUsd) || 0;
     const realizedPnl = parseFloat(token.realizedPnl) || 0;
     const unrealizedPnl = parseFloat(token.unrealizedPnl) || 0;
     const totalPnl = parseFloat(token.totalPnl) || 0;
@@ -300,6 +302,7 @@ async function scoreWallet(walletAddress, chainId, maxTokens = 30) {
     // Track stats
     results.stats.realizedPnl += realizedPnl;
     results.stats.unrealizedPnl += unrealizedPnl;
+    if (balance > 0) results.stats.totalBagsValue += balanceUsd;
     if (isRugged) results.stats.rugged++;
     if (balance > 0) results.stats.held++;
     
@@ -317,6 +320,7 @@ async function scoreWallet(walletAddress, chainId, maxTokens = 30) {
       sellCount: token.totalTxSell || 0,
       score,
       pnl: totalPnl,
+      balanceUsd,
       isRugged,
       holding: balance > 0,
     });
@@ -423,9 +427,11 @@ function formatTelegramMessage(results) {
   
   lines.push(``);
   
-  // PnL
+  // PnL & Holdings
   lines.push(`Realized PnL: ${formatAmount(stats.realizedPnl)}`);
-  lines.push(`Unrealized PnL: ${stats.unrealizedPnl === 0 ? '$0' : formatAmount(stats.unrealizedPnl)}`);
+  if (stats.totalBagsValue > 0) {
+    lines.push(`Holdings: ${formatAmount(stats.totalBagsValue).replace(/^\+/, '')} (${stats.held} tokens)`);
+  }
   
   // Rug info
   if (stats.rugged > 0) {
@@ -437,23 +443,36 @@ function formatTelegramMessage(results) {
   
   lines.push(``);
   
-  // Top tokens (max 5) with links
-  const sortedTokens = [...tokens].sort((a, b) => b.pnl - a.pnl);
+  // Top tokens (max 5) with links - sort by bag value if holding, else by PnL
+  const sortedTokens = [...tokens].sort((a, b) => {
+    // Prioritize held tokens by their bag value
+    if (a.holding && b.holding) return b.balanceUsd - a.balanceUsd;
+    if (a.holding) return -1;
+    if (b.holding) return 1;
+    return b.pnl - a.pnl;
+  });
   const topTokens = sortedTokens.slice(0, 5);
   
   if (topTokens.length > 0) {
     lines.push(`<b>Top Tokens</b>`);
     topTokens.forEach(t => {
       const icon = getScoreIcon(t.score);
-      const pnlStr = formatAmount(t.pnl);
       const tokenUrl = `${explorer.token}${t.address}`;
       const trades = `(${t.buyCount}↗ | ${t.sellCount}↘)`;
+      
+      // Show bag value for held tokens, PnL for sold
+      let valueStr;
+      if (t.holding && t.balanceUsd > 0) {
+        valueStr = `${formatAmount(t.balanceUsd).replace(/^\+/, '')} 💰`;
+      } else {
+        valueStr = formatAmount(t.pnl);
+      }
+      
       const extras = [];
       if (t.isRugged) extras.push('💀');
-      if (t.holding) extras.push('📦');
       const extraStr = extras.length > 0 ? ` ${extras.join('')}` : '';
       
-      lines.push(`${icon} <a href="${tokenUrl}">${t.symbol}</a>: ${pnlStr} ${trades}${extraStr}`);
+      lines.push(`${icon} <a href="${tokenUrl}">${t.symbol}</a>: ${valueStr} ${trades}${extraStr}`);
     });
   }
   
